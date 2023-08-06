@@ -1,0 +1,5 @@
+sample_rate: 48000
+midi_device_name: "device_name"
+output_device_name: "jack"
+output_channels: 1
+buffer_size: 128
