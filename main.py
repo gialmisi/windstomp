@@ -27,7 +27,7 @@ def create_sine(frequency, duration=duration, sample_rate=sample_rate) -> np.nda
 
 p = pyaudio.PyAudio()
 
-stream = p.open(format=pyaudio.paFloat32, channels=1, rate=sample_rate, output=True, frames_per_buffer=128)
+stream = p.open(format=pyaudio.paFloat32, channels=1, rate=sample_rate, output=True, frames_per_buffer=128, output_device_index=0)
 
 wave_A = 0.2*create_sine(440.0, duration=0.5)
 wave_B = 0.2*create_sine(493.88, duration=0.5)
@@ -56,15 +56,23 @@ while True:
         print(output)
 
     time.sleep(0.1)
-
 """
 
 import pyaudio
 import numpy as np
+import pygame
+import pygame.midi
+
+pygame.init()
+pygame.midi.init()
+default_id = pygame.midi.get_default_input_id() 
+
+print(default_id)
+in_midi = pygame.midi.Input(1)
 
 # Define constants
 SAMPLE_RATE = 48000  # Hertz
-DURATION = 5  # The duration of the wave
+DURATION = 6  # The duration of the wave
 FREQUENCY = 440.0  # Frequency of the wave in Hz
 
 # Generate array with time points
@@ -76,12 +84,43 @@ note = np.sin(FREQUENCY * t * 2 * np.pi)
 # Convert to 32-bit data
 audio = note.astype(np.float32)
 
+def sine_wave_generator(audio):
+    index = 0
+    while True:
+        if index < len(audio):
+            yield audio[index]
+            index += 1
+        else:
+            index = 0  # loop back to the beginning
+            print("looping!")
+
+# Create a generator for our sine wave audio data
+sine_wave = sine_wave_generator(audio)
+
 # Start playback
 p = pyaudio.PyAudio()
 
+"""
+for i in range(p.get_device_count()):
+    device_info = p.get_device_info_by_index(i)
+    print(device_info)
+"""
+
+def find_device_index_by_name(device_name, p=p):
+    for i in range(p.get_device_count()):
+        device_info = p.get_device_info_by_index(i)
+        if device_info["name"] == device_name:
+            return device_info["index"]
+    raise ValueError(f"No device with name '{device_name}' found")
+
+# replace 'Desired Device Name' with the name of your device
+device_index = find_device_index_by_name('jack')
+print(device_index)
+
 # Define callback for PyAudio to pull data from
 def callback(in_data, frame_count, time_info, status):
-    data = audio[:frame_count]
+    # Get the next chunk of audio data from the generator
+    data = np.array([next(sine_wave) for _ in range(frame_count)], dtype=np.float32)
     return (data.tobytes(), pyaudio.paContinue)
 
 # Open stream using callback
@@ -89,7 +128,8 @@ stream = p.open(format=pyaudio.paFloat32,
                 channels=1,
                 rate=SAMPLE_RATE,
                 output=True,
-                frames_per_buffer=1028,
+                output_device_index=device_index,
+                frames_per_buffer=128,
                 stream_callback=callback)
 
 # Start the stream
